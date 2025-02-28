@@ -1,77 +1,85 @@
-import express, { Request, Response } from 'express';
+import express, { NextFunction, Request, Response } from 'express';
 import axios from 'axios';
-
+import pool from './utils/database';
+import { decryptToken, encryptToken } from './utils/encryption';
+import { groupCommitsByPeriod } from './utils/week-number';
+import { getAllMembers } from './utils/github';
 const app = express();
 
-// JSON 요청 파싱 미들웨어
-app.use(express.json());
+declare global {
+  namespace Express {
+    interface Request {
+      user?: any;
+    }
+  }
+}
 
 const PORT = process.env.PORT || 3002;
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 const REPO_OWNER = 'funbleDev';
 const REPO_NAME = 'funbleWebView';
 
-const getISOWeekNumber = (date: Date): number => {
-    const tempDate = new Date(date.getTime());
-    tempDate.setHours(0, 0, 0, 0);
-    // 해당 주의 목요일을 기준으로 함
-    tempDate.setDate(tempDate.getDate() + 3 - ((tempDate.getDay() + 6) % 7));
-    // 1월 4일은 항상 1주차에 포함됨
-    const week1 = new Date(tempDate.getFullYear(), 0, 4);
-    return 1 + Math.round(
-      ((tempDate.getTime() - week1.getTime()) / 86400000 - 3 + ((week1.getDay() + 6) % 7)) / 7
+export const validateToken = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const encrypted_token = req.headers.authorization?.split(' ')[2];
+    const iv = req.headers.iv as string;
+    const salt = req.headers.salt as string;
+    console.log(encrypted_token, iv, salt);
+    if (!encrypted_token || !iv || !salt) {
+      res.status(401).json({ error: 'No token provided' });
+      return;
+    }
+
+    // 토큰 복호화
+    const decryptedToken = decryptToken(
+      encrypted_token,
+      iv,
+      salt
     );
-  };
-  
-  const groupCommitsByPeriod = (commits: any[]) => {
-    const daily: Record<string, any[]> = {};
-    const weekly: Record<string, any[]> = {};
-    const monthly: Record<string, any[]> = {};
-  
-    commits.forEach(commit => {
-      // 필요한 필드만 추출
-      const message = commit.commit.message;
-      const author = commit.commit.author.name;
-      const dateStr = commit.commit.author.date;
-      const date = new Date(dateStr);
-  
-      // 추출한 데이터로 새 객체 생성
-      const filteredCommit = { message, author, date: dateStr };
-  
-      // 일간: YYYY-MM-DD 형식
-      const dayKey = dateStr.split('T')[0];
-      // 주간: 연도-W주차 형식
-      const weekNumber = getISOWeekNumber(date);
-      const weekKey = `${date.getFullYear()}-W${weekNumber}`;
-      // 월간: YYYY-MM 형식
-      const monthKey = `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}`;
-  
-    if (!daily[dayKey]) {
-        daily[dayKey] = [];
-        };
-        
-      daily[dayKey].push(filteredCommit);
-  
-    if (!weekly[weekKey]) {
-        weekly[weekKey] = [];
-        };
-        
-      weekly[weekKey].push(filteredCommit);
-  
-    if (!monthly[monthKey]) {
-        monthly[monthKey] = [];
-        };
-        
-      monthly[monthKey].push(filteredCommit);
-    });
-  
-    return { daily, weekly, monthly };
-  };
+
+    console.log(decryptedToken);
+
+    try {
+      req.user = decryptedToken;
+      next();
+    } catch (error) {
+      res.status(401).json({ error: 'Invalid or expired token' });
+      return;
+    }
+  } catch (error) {
+    console.error('Token validation error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+    return;
+  }
+};
+
+interface GitHubUser {
+  login: string;
+  id: number;
+  name: string | null;
+  email: string | null;
+}
+/**
+ * 조직의 모든 멤버 정보를 가져오는 함수
+ * @param token GitHub 인증 토큰
+ * @param org 조직 이름
+ * @returns 조직 멤버 목록
+ */
+const getTeamMembers = async (token: string, org: string, teamSlug: string) => {
+  return axios.get(`https://api.github.com/orgs/${org}/teams/${teamSlug}/members`, {
+    headers: { Authorization: `token ${token}` }
+  });
+};
+
+
+// JSON 요청 파싱 미들웨어
+app.use(express.json());
 
 
 // /commits 엔드포인트: GitHub API를 호출해 커밋 로그 반환
-app.get('/commits', async (req: Request, res: Response) => {
+app.get('/commits', validateToken, async (req: Request, res: Response): Promise<void> => {
   try {
+    console.log(req.user)
     const response = await axios.get(`https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/commits`, {
       headers: { Authorization: `token ${GITHUB_TOKEN}` }
     });
@@ -141,6 +149,47 @@ app.get('/commits/:branch', async (req: Request, res: Response) => {
         res.status(500).send('An unexpected error occurred');
       }
     }
+});
+
+app.post('/auth/join', async (req: Request, res: Response) => {
+  try {
+    const { github_token, repo_owner, repo_name } = req.body;
+
+    const userInfo = await getTeamMembers(github_token, repo_owner, repo_name);
+  console.log(userInfo)
+    // if (!githubToken) {
+    //   res.status(400).json({ error: 'GitHub token is required' });
+    //   return;
+    // }
+    //  // GitHub API를 호출하여 토큰 유효성 검증
+    //  try {
+    //   await axios.get('https://api.github.com/user', {
+    //     headers: { Authorization: `token ${githubToken}` }
+    //   });
+    // } catch (error) {
+    //    res.status(401).json({ error: 'Invalid GitHub token' });
+    //    return;
+    // }
+
+    // // 토큰 암호화
+    // const encryptedData = encryptToken(githubToken);
+
+    // // DB에 암호화된 토큰 저장
+    // await pool.execute(
+    //   `INSERT INTO tokens (iv, salt, encrypted_token) 
+    //    VALUES (?, ?, ?, ?)
+    //    ON DUPLICATE KEY UPDATE 
+    //    iv = VALUES(iv),
+    //    salt = VALUES(salt),
+    //    encrypted_token = VALUES(encrypted_token)`,
+    //   [encryptedData.iv, encryptedData.salt, encryptedData.encryptedData]
+    // );
+
+    // res.status(200).json({ message: 'Token saved successfully' });
+  }
+  catch (error) {
+    res.status(500).send('An unexpected error occurred');
+  }
 });
 
 app.listen(PORT, () => {
