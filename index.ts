@@ -33,7 +33,7 @@ const getUserFromDB = async (username: string, inputToken?: string, inputRepoOwn
       'SELECT iv, salt, encrypted_token, encrypted_username, encrypted_repo_owner FROM tokens WHERE encrypted_username = ?',
       [username]
     );
-    
+
     if (!Array.isArray(rows) || rows.length === 0) {
       return null;
     }
@@ -43,14 +43,20 @@ const getUserFromDB = async (username: string, inputToken?: string, inputRepoOwn
     // 2. 입력받은 토큰과 owner_name이 있는 경우 검증
     if (inputToken && inputRepoOwner) {
       // 저장된 salt와 iv로 입력값들을 암호화
-      const encryptedInput = encryptMultipleValues({
-        github_token: inputToken,
-        repo_owner: inputRepoOwner
-      }, row.salt, row.iv); // DB의 salt와 iv 사용
+      const encryptedInput = encryptMultipleValues(
+        {
+          github_token: inputToken,
+          repo_owner: inputRepoOwner,
+        },
+        row.salt,
+        row.iv
+      ); // DB의 salt와 iv 사용
 
       // DB에 저장된 값과 비교
-      if (row.encrypted_token !== encryptedInput.encryptedValues.github_token ||
-          row.encrypted_repo_owner !== encryptedInput.encryptedValues.repo_owner) {
+      if (
+        row.encrypted_token !== encryptedInput.encryptedValues.github_token ||
+        row.encrypted_repo_owner !== encryptedInput.encryptedValues.repo_owner
+      ) {
         return null;
       }
     }
@@ -60,7 +66,7 @@ const getUserFromDB = async (username: string, inputToken?: string, inputRepoOwn
       username: username,
       repo_owner: row.encrypted_repo_owner,
       iv: row.iv,
-      salt: row.salt
+      salt: row.salt,
     };
   } catch (error) {
     console.error('DB Error:', error);
@@ -84,17 +90,9 @@ export const validateToken = async (req: Request, res: Response, next: NextFunct
     }
 
     // 토큰 복호화
-    const decryptedToken = decryptToken(
-      encrypted_token,
-      iv,
-      salt
-    );
+    const decryptedToken = decryptToken(encrypted_token, iv, salt);
 
-    const decryptedRepoOwner = decryptToken(
-      repo_owner,
-      iv,
-      salt
-    );
+    const decryptedRepoOwner = decryptToken(repo_owner, iv, salt);
 
     console.log(decryptedToken, decryptedRepoOwner);
 
@@ -102,8 +100,8 @@ export const validateToken = async (req: Request, res: Response, next: NextFunct
       req.user = {
         token: decryptedToken,
         username: username,
-        repoOwner: decryptedRepoOwner
-      }
+        repoOwner: decryptedRepoOwner,
+      };
 
       next();
     } catch (error) {
@@ -118,8 +116,6 @@ export const validateToken = async (req: Request, res: Response, next: NextFunct
   }
 };
 
-
-
 // JSON 요청 파싱 미들웨어
 app.use(express.json());
 
@@ -133,8 +129,8 @@ app.get('/', validateToken, async (req: Request, res: Response) => {
     const response = await axios.get(`https://api.github.com/orgs/${repoOwner}/repos`, {
       headers: {
         Authorization: `Bearer ${token}`,
-        Accept: 'application/vnd.github+json'
-      }
+        Accept: 'application/vnd.github+json',
+      },
     });
 
     // 레포 리스트만 추출해서 반환
@@ -143,9 +139,9 @@ app.get('/', validateToken, async (req: Request, res: Response) => {
       url: repo.url,
     }));
 
-    res.status(200).json({ 
+    res.status(200).json({
       message: 'Data saved successfully',
-      data
+      data,
     });
   } catch (error) {
     if (axios.isAxiosError(error)) {
@@ -167,46 +163,40 @@ app.get('/branches', validateToken, async (req: Request, res: Response) => {
       res.status(400).json({ error: 'Required fields are missing' });
       return;
     }
-  
-      const response = await axios.get(
-        `https://api.github.com/repos/${repoOwner}/${branch}/branches`,
-        {
-          headers: {
-            Authorization: `token ${token}`
-          }
-        }
-      );
-        
-      // 브랜치 정보 반환
-    res.status(200).json({ 
-      message: 'Data saved successfully',
-      data: response.data
+
+    const response = await axios.get(`https://api.github.com/repos/${repoOwner}/${branch}/branches`, {
+      headers: {
+        Authorization: `token ${token}`,
+      },
     });
 
-    } catch (error) {
-      if (axios.isAxiosError(error)) {
-        res.status(500).send(error.message);
-      } else {
-        res.status(500).send('An unexpected error occurred');
-      }
+    // 브랜치 정보 반환
+    res.status(200).json({
+      message: 'Data saved successfully',
+      data: response.data,
+    });
+  } catch (error) {
+    if (axios.isAxiosError(error)) {
+      res.status(500).send(error.message);
+    } else {
+      res.status(500).send('An unexpected error occurred');
     }
+  }
 });
-
 
 // /commits 엔드포인트: GitHub API를 호출해 커밋 로그 반환
 app.get('/commits', validateToken, async (req: Request, res: Response): Promise<void> => {
   try {
-    console.log(req.user)
+    console.log(req.user);
     const response = await axios.get(`https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/commits`, {
-      headers: { Authorization: `token ${GITHUB_TOKEN}` }
+      headers: { Authorization: `token ${GITHUB_TOKEN}` },
     });
 
-    res.status(200).json({ 
+    res.status(200).json({
       message: 'Data saved successfully',
-      data: response.data
+      data: response.data,
     });
-
-      } catch (error) {
+  } catch (error) {
     if (axios.isAxiosError(error)) {
       res.status(500).send(error.message);
     } else {
@@ -217,38 +207,35 @@ app.get('/commits', validateToken, async (req: Request, res: Response): Promise<
 
 // 2. 특정 브랜치 커밋 목록 조회
 app.get('/commits/:branch', async (req: Request, res: Response) => {
-    const { branch } = req.params;
-    const myUsername = 'Shinjinseop-Jacob'; // 내 GitHub 사용자명
+  const { branch } = req.params;
+  const myUsername = 'Shinjinseop-Jacob'; // 내 GitHub 사용자명
 
-    try {
-      // 브랜치 이름을 쿼리 파라미터로 전달
-      const response = await axios.get(
-        `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/commits?sha=${branch}`,
-        {
-          headers: {
-            Authorization: `token ${GITHUB_TOKEN}`            },
-            params: {
-                sha: branch,
-                author: myUsername
-            }
-        }
-      );
-    
+  try {
+    // 브랜치 이름을 쿼리 파라미터로 전달
+    const response = await axios.get(`https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/commits?sha=${branch}`, {
+      headers: {
+        Authorization: `token ${GITHUB_TOKEN}`,
+      },
+      params: {
+        sha: branch,
+        author: myUsername,
+      },
+    });
+
     // 받아온 커밋 배열을 기간별로 그룹핑
     const grouped = groupCommitsByPeriod(response.data);
-        
-    res.status(200).json({ 
+
+    res.status(200).json({
       message: 'Data saved successfully',
-      data: grouped
+      data: grouped,
     });
-    
-    } catch (error) {
-      if (axios.isAxiosError(error)) {
-        res.status(500).send(error.message);
-      } else {
-        res.status(500).send('An unexpected error occurred');
-      }
+  } catch (error) {
+    if (axios.isAxiosError(error)) {
+      res.status(500).send(error.message);
+    } else {
+      res.status(500).send('An unexpected error occurred');
     }
+  }
 });
 
 app.post('/auth/join', async (req: Request, res: Response) => {
@@ -263,7 +250,7 @@ app.post('/auth/join', async (req: Request, res: Response) => {
     // GitHub API를 호출하여 토큰 유효성 검증
     try {
       await axios.get('https://api.github.com/user', {
-        headers: { Authorization: `token ${github_token}` }
+        headers: { Authorization: `token ${github_token}` },
       });
     } catch (error) {
       res.status(401).json({ error: 'Invalid GitHub token' });
@@ -274,7 +261,7 @@ app.post('/auth/join', async (req: Request, res: Response) => {
     const encryptedData = encryptMultipleValues({
       github_token,
       username,
-      repo_owner
+      repo_owner,
     });
 
     // DB에 암호화된 데이터 저장
@@ -287,19 +274,13 @@ app.post('/auth/join', async (req: Request, res: Response) => {
        encrypted_token = VALUES(encrypted_token),
        encrypted_username = VALUES(encrypted_username),
        encrypted_repo_owner = VALUES(encrypted_repo_owner)`,
-      [
-        encryptedData.iv,
-        encryptedData.salt,
-        encryptedData.encryptedValues.github_token,
-        username,
-        encryptedData.encryptedValues.repo_owner
-      ]
+      [encryptedData.iv, encryptedData.salt, encryptedData.encryptedValues.github_token, username, encryptedData.encryptedValues.repo_owner]
     );
 
-    res.status(200).json({ 
+    res.status(200).json({
       message: 'Data saved successfully',
       iv: encryptedData.iv,
-      salt: encryptedData.salt
+      salt: encryptedData.salt,
     });
   } catch (error) {
     console.error('Join error:', error);
@@ -324,16 +305,16 @@ app.post('/auth/login', async (req: Request, res: Response) => {
     }
 
     // GitHub API로 토큰 유효성 검증
-      res.status(200).json({
-        message: 'Login successful',
-        user: {
-          username: userData.username,
-          repo_owner: userData.repo_owner,
-          github_token: userData.github_token
-        },
-        iv: userData.iv,
-        salt: userData.salt
-      });
+    res.status(200).json({
+      message: 'Login successful',
+      user: {
+        username: userData.username,
+        repo_owner: userData.repo_owner,
+        github_token: userData.github_token,
+      },
+      iv: userData.iv,
+      salt: userData.salt,
+    });
   } catch (error) {
     console.error('Login error:', error);
     res.status(500).json({ error: 'Internal server error' });
