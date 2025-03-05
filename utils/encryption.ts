@@ -30,7 +30,7 @@ export const encryptToken = (token: string): EncryptedData => {
   return {
     iv: iv.toString('hex'),
     salt,
-    encryptedData: encryptedBuffer.toString('hex')
+    encryptedData: encryptedBuffer.toString('hex'),
   };
 };
 
@@ -45,9 +45,9 @@ export const encryptMultipleValues = (
   const salt = existingSalt || crypto.randomBytes(16).toString('hex');
   const derivedKey = crypto.scryptSync(secretKey, salt, 32);
   const iv = existingIv ? Buffer.from(existingIv, 'hex') : crypto.randomBytes(16);
-  
+
   const encryptedValues: { [key: string]: string } = {};
-  
+
   // 각 값을 동일한 salt와 iv로 암호화
   Object.entries(values).forEach(([fieldName, value]) => {
     const cipher = crypto.createCipheriv(algorithm, derivedKey, iv);
@@ -58,7 +58,7 @@ export const encryptMultipleValues = (
   return {
     iv: iv.toString('hex'),
     salt,
-    encryptedValues
+    encryptedValues,
   };
 };
 
