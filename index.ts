@@ -87,7 +87,7 @@ export const validateToken = async (req: Request, res: Response, next: NextFunct
     console.log(encrypted_token, iv, salt, username, repo_owner);
 
     if (!encrypted_token || !iv || !salt || !username) {
-      res.status(401).json({ error: 'No token provided' });
+      res.status(401).json({ error: `${encrypted_token}, ${iv}, ${salt}, ${username}` });
       return;
     }
 
