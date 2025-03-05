@@ -1,8 +1,10 @@
 import express, { NextFunction, Request, Response } from 'express';
 import axios from 'axios';
 import pool from './utils/database';
-import { decryptToken, encryptToken, encryptMultipleValues, decryptMultipleValues } from './utils/encryption';
+import { decryptToken, encryptMultipleValues } from './utils/encryption';
 import { groupCommitsByPeriod } from './utils/week-number';
+import cors from 'cors';
+
 const app = express();
 
 declare global {
@@ -119,6 +121,8 @@ export const validateToken = async (req: Request, res: Response, next: NextFunct
 };
 
 
+// 모든 출처 허용
+app.use(cors());
 
 // JSON 요청 파싱 미들웨어
 app.use(express.json());
