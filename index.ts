@@ -113,7 +113,7 @@ export const validateToken = async (req: Request, res: Response, next: NextFunct
     }
   } catch (error) {
     console.error('Token validation error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Internal server error validateToken' });
     return;
   }
 };
@@ -151,7 +151,7 @@ app.get('/', validateToken, async (req: Request, res: Response) => {
     });
   } catch (error) {
     if (axios.isAxiosError(error)) {
-      res.status(500).send(error.message);
+      res.status(500).send(error.message + '/getRepoList');
     } else {
       res.status(500).send('An unexpected error occurred');
     }
